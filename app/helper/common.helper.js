@@ -1,7 +1,7 @@
 const crypto = require("crypto");
 const algorithm = "aes-256-cbc"; 
 const nodemailer = require("nodemailer")
-const openpgpEncrypt = require('nodemailer-openpgp').openpgpEncrypt;
+const openpgp = require('openpgp');
 const twilio = require('twilio')
 
 const encryptedString = (message) => {
@@ -55,9 +55,21 @@ const sendEmail = (setting, email) => {
             };
 
             if (setting.pgpEncryptEnabled === true) {
-                transporter.use('stream', openpgpEncrypt());
-                mailOptions.encryptionKeys = [setting.pgpPublicKey]
-                mailOptions.shouldEncrypt = true
+                const publicKey = await openpgp.readKey({ armoredKey: setting.pgpPublicKey });
+                if (mailOptions.text) {
+                    const encrypted = await openpgp.encrypt({
+                        message: await openpgp.createMessage({ text: mailOptions.text }),
+                        encryptionKeys: publicKey,
+                    });
+                    mailOptions.text = encrypted;
+                }
+                if (mailOptions.html) {
+                    const encryptedHtml = await openpgp.encrypt({
+                        message: await openpgp.createMessage({ text: mailOptions.html }),
+                        encryptionKeys: publicKey,
+                    });
+                    mailOptions.html = encryptedHtml;
+                }
             }
 
             transporter.sendMail(mailOptions);

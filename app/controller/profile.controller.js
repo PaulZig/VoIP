@@ -2,7 +2,7 @@ const Validator = require('validatorjs');
 var Setting = require('../model/setting.model');
 var Message = require('../model/message.model');
 const twilio = require('twilio');
-const telnyx = require('telnyx');
+const Telnyx = require('telnyx');
 const telnyxHelper = require('../helper/telnyx.helper')
 const twilioHelper = require('../helper/twilio.helper')
 exports.crateProfile = async (req, res) => {
@@ -71,14 +71,14 @@ exports.deleteProfile = async (req, res) => {
         if(settingCheck){
             Message.deleteMany({setting:settingCheck._id })
             if(settingCheck.type === 'telnyx' && settingCheck.api_key && settingCheck.setting){
-                var Telynx = telnyx(settingCheck.api_key)  
+                var telnyxClient = new Telnyx({ apiKey: settingCheck.api_key })
                 try{
-                    await Telynx.phoneNumbers.update(
+                    await telnyxClient.phoneNumbers.update(
                         settingCheck.sid,
                         { connection_id: '' }
-                    ); 
+                    );
                 }catch(error){
-                    
+
                 }
                 if(settingCheck.sip_id){
                     try{
@@ -95,22 +95,21 @@ exports.deleteProfile = async (req, res) => {
                 }
                 if(settingCheck.telnyx_twiml){
                     try{
-                        await telnyxHelper.deleteTexmlApp(settingCheck.api_key, settingCheck.telnyx_twiml) 
+                        await telnyxHelper.deleteTexmlApp(settingCheck.api_key, settingCheck.telnyx_twiml)
                     }catch(error){
-        
+
                     }
                 }
                 try{
-                    await Telynx.phoneNumbers.updateMessagingSettings(
+                    await telnyxClient.phoneNumbers.messaging.update(
                         settingCheck.sid,
                         { messaging_profile_id: "" }
-                    ); 
+                    );
                 }catch(error){
 
                 }
                 try{
-                    const { data: messagingProfiles } = await Telynx.messagingProfiles.retrieve(settingCheck.setting);
-                    await messagingProfiles.del();
+                    await telnyxClient.messagingProfiles.delete(settingCheck.setting);
                 }catch(error){
 
                 }

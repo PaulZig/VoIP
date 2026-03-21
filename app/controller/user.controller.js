@@ -202,53 +202,28 @@ exports.checkDirectoryName = (req, res) => {
         res.status(400).json({status:'false',message:'something is wrong'});
     }
 };
-exports.getUpdateVersion = (req, res) => {
+exports.getUpdateVersion = async (req, res) => {
     try{
-        var request = require('request');
-        request.get(remoteVersion, async function (error, response, body) {
-            if (!error && response.statusCode == 200) {
-                if(isNaN(body)){
-                    res.send({update: 'false'});
+        const axios = require('axios');
+        const response = await axios.get(remoteVersion);
+        const body = response.data;
+        if(isNaN(body)){
+            res.send({update: 'false'});
+        }else{
+            try {
+                const body2 = fs.readFileSync(currentVersion, 'utf8')
+                if(body2 < body){
+                    res.send({update: 'true'});
                 }else{
-                    // var curruntv = process.env.APP_VERSION
-                    // curruntv = curruntv.replace("v", "").replace("-beta", "");
-                    // console.log(body)
-                    //console.log(currentVersion)
-                    try {
-                        const body2 = fs.readFileSync(currentVersion, 'utf8')
-                        if(body2 < body){
-                            res.send({update: 'true'});
-                        }else{
-                            res.send({update: 'false'});
-                        }
-                    } catch (err) {
-                        console.error(err)
-                        res.send({update: 'false'});
-                    }
-                    // request.get(currentVersion, async function (error, response, body2) {
-                    //     if (!error && response.statusCode == 200) {
-                    //         if(isNaN(body2)){
-                    //             res.send({update: 'false'});
-                    //         }else{
-                    //             if(body2 < body){
-                    //                 res.send({update: 'true'});
-                    //             }else{
-                    //                 res.send({update: 'false'});
-                    //             }
-                    //         }
-                    //     }else{
-                    //         res.send({update: 'false'});
-                    //     }
-                    // });
-                    // console.log(currentVersion)
-                    // var current
+                    res.send({update: 'false'});
                 }
-            }else{
+            } catch (err) {
+                console.error(err)
                 res.send({update: 'false'});
             }
-        });
+        }
     }catch(error){
-        res.status(400).json({status:'false',message:'something is wrong'});
+        res.send({update: 'false'});
     }
 };
 

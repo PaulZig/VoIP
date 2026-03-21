@@ -32,31 +32,20 @@ let setCache = function (req, res, next) {
 }
 app.use(setCache)
 
-var RateLimit = require('express-rate-limit');
+var rateLimit = require('express-rate-limit');
 const helmet = require("helmet");
 app.use(
-  helmet.contentSecurityPolicy({
-    useDefaults: true,
-    reportOnly: false,
-    directives: {
-      "default-src": ["'self'", "sdk.twilio.com","wss:","ws:","eventgw.twilio.com"
-    ],
-      "object-src": ["'self'"],
-      "script-src": ["'self'","'unsafe-eval'", "'unsafe-inline'"]
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        "default-src": ["'self'", "sdk.twilio.com", "wss:", "ws:", "eventgw.twilio.com"],
+        "object-src": ["'self'"],
+        "script-src": ["'self'", "'unsafe-eval'", "'unsafe-inline'"]
+      },
     },
   })
 );
-//sdk.twilio.com
-app.use(helmet.dnsPrefetchControl());
-app.use(helmet.expectCt());
-app.use(helmet.frameguard());
-app.use(helmet.hidePoweredBy());
-app.use(helmet.hsts());
-app.use(helmet.ieNoOpen());
-app.use(helmet.noSniff());
-app.use(helmet.permittedCrossDomainPolicies());
-app.use(helmet.referrerPolicy());
-app.use(helmet.xssFilter());
 app.disable('x-powered-by');
 app.set('trust proxy', 1)
 const server = require('http').createServer(app);
@@ -74,11 +63,11 @@ db.once('open', function() {
 //app.use(cors());
 app.use(cors({ origin: ['http://localhost:8080'], }))
 
-var limiter = new RateLimit({
+var limiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute
   max: 100,
   message: "Slow down your requests!",
-  headers: false
+  legacyHeaders: false
 });
   
 // apply rate limiter to all requests
