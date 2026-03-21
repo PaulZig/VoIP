@@ -185,7 +185,7 @@ exports.delete = async (req, res) => {
         var harewarekey = await Hardwarekey.findOne({_id: req.body.id});
         if(harewarekey){
             await Handel.deleteOne({username: harewarekey.title, user: harewarekey.user});
-            await harewarekey.delete()
+            await harewarekey.deleteOne()
         }
         var harewarekeys = await Hardwarekey.findOne({user:req.user.id, registrationComplete: true});
         if(!harewarekeys){

@@ -1,5 +1,5 @@
 const Validator = require("validatorjs");
-const telnyx = require("telnyx");
+const Telnyx = require("telnyx");
 const moment = require("moment");
 var mongoose = require("mongoose");
 const twilio = require("twilio");
@@ -28,9 +28,9 @@ exports.deleteKey = async (req, res) => {
     });
     try {
       if (settingCheck.type === "telnyx") {
-        var Telynx = telnyx(settingCheck.api_key);
+        var telnyxClient = new Telnyx({ apiKey: settingCheck.api_key });
         try {
-          await Telynx.phoneNumbers.update(settingCheck.sid, {
+          await telnyxClient.phoneNumbers.update(settingCheck.sid, {
             connection_id: "",
           });
         } catch (error) {}
@@ -232,8 +232,8 @@ exports.create = async (req, res) => {
             }
             if (save) {
               if (settingStore) {
-                var saveTelnyxSetting = await telnyx(
-                  req.body.api_key
+                var saveTelnyxSetting = await new Telnyx(
+                  { apiKey: req.body.api_key }
                 ).messagingProfiles.create({
                   name: "VoIP sms Web Application",
                   enabled: true,
@@ -246,7 +246,7 @@ exports.create = async (req, res) => {
                 });
                 var telnyxSetting = saveTelnyxSetting.data.id;
               } else {
-                await telnyx(req.body.api_key).messagingProfiles.update(
+                await new Telnyx({ apiKey: req.body.api_key }).messagingProfiles.update(
                   settingCheck.setting,
                   {
                     webhook_url: combineURLs(
@@ -260,13 +260,13 @@ exports.create = async (req, res) => {
               }
               settingCheck.setting = telnyxSetting;
               settingCheck.save();
-              await telnyx(
-                req.body.api_key
-              ).phoneNumbers.updateMessagingSettings(req.body.sid, {
+              await new Telnyx(
+                { apiKey: req.body.api_key }
+              ).phoneNumbers.messaging.update(req.body.sid, {
                 messaging_profile_id: telnyxSetting,
               });
               if (req.body.override === "true") {
-                await telnyx(req.body.api_key).phoneNumbers.update(
+                await new Telnyx({ apiKey: req.body.api_key }).phoneNumbers.update(
                   req.body.sid,
                   { connection_id: settingCheck.telnyx_twiml }
                 );
@@ -529,7 +529,7 @@ exports.getNumber = async (req, res) => {
       };
       let validation = new Validator(req.body, rules);
       if (validation.passes()) {
-        var phoneNumber = await telnyx(req.body.api_key).phoneNumbers.list();
+        var phoneNumber = await new Telnyx({ apiKey: req.body.api_key }).phoneNumbers.list();
         res.send({
           status: true,
           message: "Phone number list retrieved.",
@@ -645,7 +645,7 @@ exports.sendSms = async (req, res) => {
             }
           }
         } else {
-          const Telnyx = telnyx(settingCheck.api_key);
+          const telnyxClient = new Telnyx({ apiKey: settingCheck.api_key });
           var arrMessageData = [];
           for (var i = 0; i < req.body.numbers.length; i++) {
             //var sendNumber = req.body.numbers[i].length
@@ -671,7 +671,7 @@ exports.sendSms = async (req, res) => {
             if (req.body.media.length > 0) {
               telnyxParams.media_urls = req.body.media;
             }
-            var sendSms = await Telnyx.messages.create(telnyxParams);
+            var sendSms = await telnyxClient.messages.create(telnyxParams);
             if (sendSms.data.id !== undefined) {
               var messageData = {
                 sid: sendSms.data.id,

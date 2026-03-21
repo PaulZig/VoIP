@@ -80,7 +80,7 @@ exports.delete = async (req, res) => {
         var storeData = {user: {$eq: req.user.id}};
         var checkemail = await Email.findOne(storeData)
         if(checkemail){
-            var deleteEmail = checkemail.delete()
+            var deleteEmail = await checkemail.deleteOne()
             if(deleteEmail){
                 res.send({status:true, message:'Email settings deleted!', data:deleteEmail});
             }else{
