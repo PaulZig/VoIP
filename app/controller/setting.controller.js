@@ -6,7 +6,7 @@ const twilio = require("twilio");
 const path = require("path");
 const http = require("https");
 const fs = require("fs");
-const request = require("request");
+const axios = require("axios");
 const crypto = require("crypto");
 
 var Setting = require("../model/setting.model");
@@ -764,9 +764,12 @@ exports.receiveSms = async (req, res) => {
             await fs.promises.mkdir("./uploads/" + date);
           }
 
-          request(url)
-            .pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
-            .on("close", () => console.log("Image downloaded."));
+          const response = await axios({ method: 'get', url, responseType: 'stream' });
+          await new Promise((resolve, reject) => {
+            response.data.pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
+              .on("close", () => { console.log("Image downloaded."); resolve(); })
+              .on("error", reject);
+          });
           savedName = combineURLs(
             process.env.BASE_URL.trim(),
             "uploads",
@@ -774,15 +777,6 @@ exports.receiveSms = async (req, res) => {
             name
           );
           fackMedia.push(savedName);
-          /*request(url).pipe(fs.createWriteStream(name))
-                    .on('close', () => console.log('Image downloaded.'));
-                    savedName = combineURLs(
-                      process.env.BASE_URL.trim(),
-                      "uploads",
-                      date,
-                      name
-                    );
-                    fackMedia.push(savedName)*/
         }
         media = fackMedia;
       }
@@ -812,17 +806,19 @@ exports.receiveSms = async (req, res) => {
             await fs.promises.mkdir("./uploads/" + date);
           }
 
-          request(url)
-            .pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
-            .on("close", () => console.log("Image downloaded."));
-            savedName = combineURLs(
-              process.env.BASE_URL.trim(),
-              "uploads",
-              date,
-              name
-            );
+          const response2 = await axios({ method: 'get', url, responseType: 'stream' });
+          await new Promise((resolve, reject) => {
+            response2.data.pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
+              .on("close", () => { console.log("Image downloaded."); resolve(); })
+              .on("error", reject);
+          });
+          savedName = combineURLs(
+            process.env.BASE_URL.trim(),
+            "uploads",
+            date,
+            name
+          );
           fackMedia.push(savedName);
-          // fackMedia.push(messageData.media[i].url)
         }
         media = fackMedia;
       }
