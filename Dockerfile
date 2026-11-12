@@ -7,7 +7,7 @@ WORKDIR /frontend
 COPY frontend/package.json frontend/package-lock.json ./
 
 # install scripts only fetch test browsers and build unused native addons
-RUN npm ci --ignore-scripts
+RUN npm ci --ignore-scripts --legacy-peer-deps
 
 COPY frontend/ ./
 
