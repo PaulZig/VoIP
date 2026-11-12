@@ -108,7 +108,7 @@ exports.getEmail  = async (req, res) => {
 exports.saveSetting = async (req, res) => {
     try{
         // var checkemail = await Setting.findById(req.body.setting_id)
-        var checkemail = await Setting.findOne({_id: { $eq: req.body.setting_id}})
+        var checkemail = await Setting.findOne({_id: { $eq: req.body.setting_id}, user: { $eq: req.user.id }})
         if(checkemail){
             checkemail.emailnotification = req.body.status
             var updateData = await checkemail.save()

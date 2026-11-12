@@ -11,6 +11,12 @@ module.exports = (req, res, next) => {
                     try {
                         var decoded = jwt.verify(token, process.env.COOKIE_KEY);
                         //console.log(decoded)
+                        if(decoded.pending){
+                            // second factor not completed yet
+                            return res.status(401).json({
+                                error: 'Unauthorized Access!'
+                            });
+                        }
                         req.user = decoded;
                         next();
                       } catch(err) {

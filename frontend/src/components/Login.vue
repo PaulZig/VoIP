@@ -293,7 +293,7 @@ methods: {
   },
   verifyKey (key) {
     var request = {
-      data: { user: this.activeUser.user._id, title: key.title },
+      data: { token: this.activeUser.token, title: key.title },
       url: 'hardwarekey/login-key'
     }
     this.$store
@@ -305,7 +305,7 @@ methods: {
             var newCredentialInfo = await navigator.credentials.get({publicKey: getAssertionChallenge})
             newCredentialInfo = this.publicKeyCredentialToJSON(newCredentialInfo)
             var request = {
-              data: newCredentialInfo,
+              data: { ...newCredentialInfo, token: this.activeUser.token },
               url: 'hardwarekey/login'
             }
             this.$store
@@ -313,7 +313,7 @@ methods: {
               .then(async (serverResponse) => {
                 if (serverResponse) {
                   if (serverResponse.status !== 'true') { throw new Error('Error registering user! Server returned: ' + serverResponse.errorMessage) }
-                  this.$cookie.set('access_token', this.activeUser.token, 30)
+                  this.$cookie.set('access_token', serverResponse.token, 30)
                   this.$cookie.set('userdata', JSON.stringify(this.activeUser.user), 30)
                   this.activeUser.token = ''
                   this.activeUser.user = null
@@ -390,7 +390,7 @@ methods: {
     this.submitted2 = true
     if (this.otpForm.otp.trim() !== '') {
       var request = {
-        data: { user: this.activeUser.user._id, verification_code: this.otpForm.otp },
+        data: { token: this.activeUser.token, verification_code: this.otpForm.otp },
         url: 'auth/otp-verify'
       }
       this.$store
@@ -398,7 +398,7 @@ methods: {
         .then((response) => {
           if (response) {
             if (response.status === 'true') {
-              this.$cookie.set('access_token', this.activeUser.token, 30)
+              this.$cookie.set('access_token', response.token, 30)
               this.$cookie.set('userdata', JSON.stringify(this.activeUser.user), 30)
               this.activeUser.token = ''
               this.activeUser.user = null

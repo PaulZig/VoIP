@@ -3,11 +3,13 @@ module.exports = app => {
     var fallback = require('../controller/fallback.controller');
     var router = require("express").Router();
     const auth = require('../middleware/auth.middleware');
+    const twilioWebhook = require('../middleware/twilio-webhook.middleware');
+    const telnyxWebhook = require('../middleware/telnyx-webhook.middleware');
     router.post("/create",auth, setting.create);
-    router.post("/get-number", setting.getNumber);
+    router.post("/get-number", auth, setting.getNumber);
     router.post("/get-setting",auth, setting.getSetting);
-    router.post("/receive-sms/:type", setting.receiveSms); 
-    router.post("/sms-status/:type", setting.smsStatus); 
+    router.post("/receive-sms/:type", twilioWebhook, telnyxWebhook, setting.receiveSms); 
+    router.post("/sms-status/:type", twilioWebhook, telnyxWebhook, setting.smsStatus); 
     router.post("/delete-key",auth, setting.deleteKey); 
     //sms route
     router.post("/send-sms",auth, setting.sendSms);

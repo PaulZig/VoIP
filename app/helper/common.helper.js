@@ -1,37 +1,6 @@
-const crypto = require("crypto");
-const algorithm = "aes-256-cbc"; 
 const nodemailer = require("nodemailer")
 const openpgp = require('openpgp');
 const twilio = require('twilio')
-
-const encryptedString = (message) => {
-    return new Promise(async (resolve) => {
-        try {
-            const initVector = crypto.randomBytes(16);
-            const Securitykey = process.env.COOKIE_KEY;
-            const cipher = crypto.createCipheriv(algorithm, Securitykey, initVector);
-            let encryptedData = cipher.update(message, "utf-8", "hex");
-            resolve(encryptedData);
-        }catch (e){
-            console.log(e);
-            resolve(false);
-        }
-    });
-}
-
-const decryptedString = (message) => {
-    return new Promise(async (resolve) => {
-        try {
-            const Securitykey = process.env.COOKIE_KEY;
-            const cipher = crypto.createCipheriv(algorithm, Securitykey, initVector);
-            let encryptedData = cipher.update(message, "utf-8", "hex");
-            resolve(encryptedData);
-        }catch (e){
-            console.log(e);
-            resolve(false);
-        }
-    });
-}
 
 const sendEmail = (setting, email) => {
     return new Promise(async (resolve) => {
@@ -107,5 +76,5 @@ const combineURLs = (...urls)  => {
 }
 
 module.exports = {
-    encryptedString, decryptedString, sendEmail, creatTwiml, combineURLs
+    sendEmail, creatTwiml, combineURLs
 }

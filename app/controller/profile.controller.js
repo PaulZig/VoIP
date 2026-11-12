@@ -66,10 +66,10 @@ exports.getProfile = async (req, res) => {
 };
 exports.deleteProfile = async (req, res) => {
     try{
-        var settingCheck = await Setting.findOne({_id:{$eq: req.body.profile_id} })
+        var settingCheck = await Setting.findOne({_id: {$eq: req.body.profile_id}, user: {$eq: req.user.id}})
         // var getData = await Setting.deleteOne({_id:req.body.profile_id })
         if(settingCheck){
-            Message.deleteMany({setting:settingCheck._id })
+            await Message.deleteMany({setting:settingCheck._id, user: settingCheck.user })
             if(settingCheck.type === 'telnyx' && settingCheck.api_key && settingCheck.setting){
                 var telnyxClient = new Telnyx({ apiKey: settingCheck.api_key })
                 try{
@@ -139,7 +139,7 @@ exports.deleteProfile = async (req, res) => {
                     statusCallback: ''
                 })
             }
-            await Setting.deleteOne({_id:{ $eq: req.body.profile_id } })
+            await Setting.deleteOne({_id: settingCheck._id })
             res.send({status:true, message:'Profile deleted successfully!', data:settingCheck});
         }else{
             res.status(400).json({status:'false',message:'Profile not deleted!'});
@@ -158,9 +158,12 @@ exports.updateProfile = async (req, res) => {
         let validation = new Validator(req.body, rules);
         if(validation.passes()){
             // var setting = await Setting.findById(req.body.profile_id)
-            var setting = await Setting.findOne({_id: { $eq: req.body.profile_id}})
+            var setting = await Setting.findOne({_id: {$eq: req.body.profile_id}, user: {$eq: req.user.id}})
+            if(!setting){
+                return res.status(400).json({status:'false',message:'Profile not found!'});
+            }
             setting.profile = req.body.profile;
-            var save = setting.save();
+            var save = await setting.save();
             if(save){
                 res.send({status:true, message:'Profile update successfully!', data:setting});
             }else{
