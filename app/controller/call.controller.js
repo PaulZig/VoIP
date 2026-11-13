@@ -12,7 +12,7 @@ exports.create = async (req, res) => {
         let validation = new Validator(req.body, rules);
         if(validation.passes()){
             // var checkSetting = await Setting.findById(req.body.setting_id)
-            var checkSetting = await Setting.findOne({_id : {$eq: req.body.setting_id}})
+            var checkSetting = await Setting.findOne({_id: {$eq: req.body.setting_id}, user: {$eq: req.user.id}})
             if(checkSetting){
                 if(checkSetting.type === 'twilio'){
                     checkSetting.app_key = req.body.app_key
@@ -28,6 +28,8 @@ exports.create = async (req, res) => {
                 }else{
                     res.status(400).json({status:'false',message:'call setting not updated!'});
                 }
+            }else{
+                res.status(400).json({status:'false',message:'Call setting not found!'});
             }
         }else{
             res.status(419).send({status: false, errors:validation.errors, data: []});
@@ -40,17 +42,19 @@ exports.create = async (req, res) => {
 exports.delete = async (req, res) => {
     try{
         // var checkSetting = await Setting.findById(req.body.setting_id)
-        var checkSetting = await Setting.findOne({_id : {$eq: req.body.setting_id}})
-        if(checkemail){
+        var checkSetting = await Setting.findOne({_id: {$eq: req.body.setting_id}, user: {$eq: req.user.id}})
+        if(checkSetting){
             checkSetting.app_key = null
             checkSetting.app_secret = null
             checkSetting.twiml_app = null
             var saveData = await checkSetting.save()
             if(saveData){
-                res.send({status:true, message:'Call setting deleted!', data:deleteEmail});
+                res.send({status:true, message:'Call setting deleted!', data:[]});
             }else{
                 res.status(400).json({status:'false',message:'Call setting not deleted!'});
             }
+        }else{
+            res.status(400).json({status:'false',message:'Call setting not found!'});
         }
     }catch(error){
         res.status(400).json({status:'false',message:'something went wrong'});
@@ -59,7 +63,7 @@ exports.delete = async (req, res) => {
 exports.get  = async (req, res) => {
     try{
         // var checkSetting = await Setting.findById(req.body.setting_id)
-        var checkSetting = await Setting.findOne({_id : {$eq: req.body.setting_id}})
+        var checkSetting = await Setting.findOne({_id: {$eq: req.body.setting_id}, user: {$eq: req.user.id}})
         res.send({status:true, message:'get Call setting!', data:checkSetting});
     }catch(error){
         res.status(400).json({status:'false',message:'something went wrong'});
@@ -69,7 +73,7 @@ exports.get  = async (req, res) => {
 exports.getToken = async (req, res) => {
     try{
         // var setting = await Setting.findById(req.body.setting_id)
-        var setting = await Setting.findOne({_id : {$eq: req.body.setting_id}})
+        var setting = await Setting.findOne({_id: {$eq: req.body.setting_id}, user: {$eq: req.user.id}})
        // console.log(setting)
         if(setting){
             if (setting.type === 'twilio') {
@@ -100,6 +104,8 @@ exports.getToken = async (req, res) => {
                 res.send({status:true, message:'get token!', data:{setting: setting, type: setting.type}});
             }
             
+        }else{
+            res.status(400).json({status:'false',message:'Call setting not found!'});
         }
     }catch(error){
         console.log(error)
@@ -112,7 +118,7 @@ exports.makeCall = async (req, res) => {
     const response = new VoiceResponse();
     try {
         // var settingCheck = await Setting.findOne({number:req.body.twilio_number})
-        var checkSetting = await Setting.findOne({number : {$eq: req.body.twilio_number}})
+        var checkSetting = await Setting.findOne({number : {$eq: req.body.twilio_number}, twilio_sid: {$eq: req.body.AccountSid}})
         if(checkSetting){
             var dial = response.dial({
                 callerId: req.body.twilio_number
@@ -144,6 +150,8 @@ exports.makeCall = async (req, res) => {
             res.set('Content-Type', 'text/xml');
             return res.send(response.toString());
         }
+        res.set('Content-Type', 'text/xml');
+        return res.send(response.toString());
     } catch(error) {
         console.log(error)
         res.set('Content-Type', 'text/xml');
@@ -159,11 +167,11 @@ exports.status = async (req, res) => {
     try{
         var call = await Call.findOne({sid: { $eq: req.body.CallSid}})
         if(call){
-            call.duration = req.body.CallDuration
-            call.status = req.body.CallStatus
-            await call.save()
-            var settingCheck = await Setting.findOne({number:{$eq: call.twilio_number}})
+            var settingCheck = await Setting.findOne({_id: call.setting, twilio_sid: {$eq: req.body.AccountSid}})
             if(settingCheck){
+                call.duration = req.body.CallDuration
+                call.status = req.body.CallStatus
+                await call.save()
                 global.io.to(settingCheck.user.toString()).emit('user_message',{message: 'call', number:call.number});
             }
         }
@@ -207,7 +215,7 @@ exports.statusTelnyx = async (req, res) => {
                             call.duration = Math.ceil(difference)
                             call.status = 'completed'
                             await call.save()
-                            var settingCheck = await Setting.findOne({number:{ $eq: call.twilio_number}})
+                            var settingCheck = await Setting.findOne({number:{ $eq: call.telnyx_number}})
                             if(settingCheck){
                                 global.io.to(settingCheck.user.toString()).emit('user_message',{message: 'call', number:call.number});
                             }
@@ -220,7 +228,7 @@ exports.statusTelnyx = async (req, res) => {
                 call.duration = req.body.CallDuration
                 call.status = req.body.CallStatus
                 await call.save()
-                var settingCheck = await Setting.findOne({number: { $eq: call.twilio_number}})
+                var settingCheck = await Setting.findOne({number: { $eq: call.telnyx_number}})
                 if(settingCheck){
                     global.io.to(settingCheck.user.toString()).emit('user_message',{message: 'call', number:call.number});
                 }
@@ -240,7 +248,7 @@ exports.incomming = async (req, res) => {
     const VoiceResponse = twilio.twiml.VoiceResponse;
     const response = new VoiceResponse();
     try{
-        var settingCheck = await Setting.findOne({number: {$eq: req.body.To}})
+        var settingCheck = await Setting.findOne({number: {$eq: req.body.To}, twilio_sid: {$eq: req.body.AccountSid}})
         if(settingCheck){
             const dial = response.dial();
             const client = dial.client();
@@ -268,14 +276,19 @@ exports.incomming = async (req, res) => {
     res.send(response.toString());
 };
 
+const escapeXml = (value) => String(value).replace(/[<>&'"]/g, (c) => ({'<':'&lt;','>':'&gt;','&':'&amp;',"'":'&apos;','"':'&quot;'}[c]));
+
 exports.telnyx = async (req, res) => {
+    var callXml = `<?xml version="1.0" encoding="UTF-8"?>
+                        <Response>
+                        </Response>`;
     try{
         var settingCheck = await Setting.findOne({number: { $eq: req.body.To}})
         if(settingCheck && settingCheck.sip_username){
             var callXml = `<?xml version="1.0" encoding="UTF-8"?>
                         <Response>
                         <Dial>
-                            <Sip>sip:${settingCheck.sip_username}@sip.telnyx.com</Sip>
+                            <Sip>sip:${escapeXml(settingCheck.sip_username)}@sip.telnyx.com</Sip>
                         </Dial>
                         </Response>`;
             var updateCall = {
@@ -295,9 +308,6 @@ exports.telnyx = async (req, res) => {
             Call.create(updateCall);
         }
     }catch(error){
-        var callXml = `<?xml version="1.0" encoding="UTF-8"?>
-                        <Response>
-                        </Response>`;
     }
     res.set('Content-Type', 'text/xml');
     res.send(callXml);

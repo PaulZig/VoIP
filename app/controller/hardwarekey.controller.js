@@ -5,6 +5,7 @@ const APP_ID = baseUrl.substr(0, baseUrl.length - 1);
 var Hardwarekey = require('../model/hardwarekey.model');
 var User = require('../model/user.model');
 var Handel = require('../model/handel.model');
+const { issueToken, verifyPendingToken } = require('./user.controller');
 
 var sessData = {};
 exports.registerSession = async (req, res) => {
@@ -114,6 +115,11 @@ exports.verify = async (req, res) => {
 exports.loginSession = async (req, res) => {
     try{
         var payload = req.body
+        var pending = verifyPendingToken(payload.token);
+        if(!pending){
+            return res.status(401).json({status:'false',message:'Unauthorized Access!'});
+        }
+        payload.user = pending.id
         var userexit = await userExists(payload.title, payload.user)
         if(!userexit){
             res.status(400).send({status: 'error', message: 'Wrong username or password!'});
@@ -159,13 +165,24 @@ function preformatGetAssertReq (getAssert) {
 exports.login = async (req, res) => {
     try{
         var payload = req.body
+        var pending = verifyPendingToken(payload.token);
+        if(!pending || sessData.user !== pending.id){
+            return res.status(401).json({status:'false',message:'Unauthorized Access!'});
+        }
+        // TODO: the assertion signature is still not verified (no public key is stored
+        // at registration), so this only proves the password step was passed.
         var userwhere = sessData.user
         var checkHandel = await getUserByUserHandle(payload.response.userHandle, userwhere);
         if(!sessData.title && !checkHandel){
             res.status(400).send({'status': 'false', message: 'Something is wrong!'});
         }else{
             sessData = {};
-            res.send({'status': 'true'});
+            var user = await User.findOne({_id: {$eq: pending.id}});
+            if(!user || user.hardwarekey !== 'true'){
+                return res.status(401).json({status:'false',message:'Unauthorized Access!'});
+            }
+            var token = await issueToken(user);
+            res.send({'status': 'true', token: token});
         }
     }catch(error){
         res.status(400).json({status:'false',message:'something is wrong'});
@@ -182,10 +199,10 @@ exports.getKey = async (req, res) => {
 }
 exports.delete = async (req, res) => {
     try{
-        var harewarekey = await Hardwarekey.findOne({_id: req.body.id});
+        var harewarekey = await Hardwarekey.findOne({_id: {$eq: req.body.id}, user: {$eq: req.user.id}});
         if(harewarekey){
             await Handel.deleteOne({username: harewarekey.title, user: harewarekey.user});
-            await harewarekey.delete()
+            await harewarekey.deleteOne()
         }
         var harewarekeys = await Hardwarekey.findOne({user:req.user.id, registrationComplete: true});
         if(!harewarekeys){
@@ -201,8 +218,7 @@ async function getUserByUserHandle(userHandle, userwhere) {
     try {
         var user = await Handel.findOne({id:userHandle});
         if(user){
-            userwhere.title = user.username;
-            let userJSON = Hardwarekey.findOne(userwhere);
+            let userJSON = await Hardwarekey.findOne({ user: userwhere, title: user.username });
             if(!userJSON)
                 throw new Error(`Username "${user.username}" does not exist!`);
 
@@ -276,15 +292,3 @@ async function updateUser(title, user, struct){
     }
 };
 
-async function generateRandomBuffer(length) {
-    if(!length)
-        length = 32;
-
-    //var randomBuff = new Uint32Array(length);
-    let randomBuff = new Uint8Array(length);
-    var getRandomValues = require('get-random-values');
-    getRandomValues(randomBuff);
-    //var crypto = require('crypto');
-    //console.log(crypto.getRandomValues(a));
-    return randomBuff
-};

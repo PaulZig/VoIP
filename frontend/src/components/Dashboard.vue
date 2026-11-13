@@ -451,7 +451,7 @@ export default {
     if (baseUrl === "http://localhost:8080") {
       this.baseurl = "http://localhost:3000";
     }
-    const socket = io(this.baseurl, { transports: ["websocket"] });
+    const socket = io(this.baseurl, { transports: ["websocket"], auth: { token: this.$cookie.get("access_token") } });
     this.socket = socket;
     var $this = this;
     this.socket.on("new_message", function (data) {

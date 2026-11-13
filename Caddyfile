@@ -1,0 +1,12 @@
+{$DOMAIN} {
+	# Public side. Only what Twilio and Telnyx have to reach is served here:
+	# their webhooks and the MMS images they fetch. The web UI and the rest of
+	# the API are reachable on the tailnet only (see the ts service).
+	@provider path /api/call/make-call /api/call/status /api/call/incomming /api/call/incoming /api/call/telnyx /api/call/status/telnyx /api/setting/receive-sms/* /api/setting/sms-status/* /uploads/*
+	handle @provider {
+		reverse_proxy app:8080
+	}
+	handle {
+		respond 404
+	}
+}

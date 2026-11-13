@@ -10,9 +10,10 @@ var storage = multer.diskStorage({
     destination: async function (req, file, cb) {
         var date = moment(new Date()).format('MMDDYYYY');
         try {
-            await fs.promises.access("./uploads/" + date);
+            await fs.promises.mkdir('./uploads/' + date, { recursive: true });
         } catch (e) {
-            await fs.promises.mkdir('./uploads/' + date)
+            // report through multer, a rejection here would take the process down
+            return cb(e);
         }
         // Uploads is the Upload_folder_name
         cb(null, `./uploads/${date}/`)
@@ -26,7 +27,7 @@ var storage = multer.diskStorage({
     }
 })
 
-const maxSize = 1000 * 1000 * 1000;
+const maxSize = 25 * 1000 * 1000;
 
 var upload = multer({
     storage: storage,
@@ -80,28 +81,31 @@ exports.fileUpload = async (req, res) => {
 };
 
 var cron = require('node-cron');
+
+// remove dated upload folders (MMDDYYYY) older than 7 days
+const removeOldUploads = () => {
+    var cutoff = moment().subtract(7, "days").startOf("day");
+    for (const dir of fs.readdirSync("./uploads")) {
+        var date = moment(dir, "MMDDYYYY", true);
+        if (date.isValid() && date.isBefore(cutoff)) {
+            fs.rmSync("./uploads/" + dir, { recursive: true, force: true });
+        }
+    }
+}
+
 // cron job runs every day at 01:00
 cron.schedule('0 1 * * *', () => {
-    console.log('running a cron job daily at 01:00 to delete mms folder older than 7 days');
-    var startdate = moment();
-    startdate = startdate.subtract(7, "days");
-    startdate = startdate.format("DDMMYYYY");
+    console.log('running a cron job daily at 01:00 to delete mms folders older than 7 days');
     try {
-        fs.rmdirSync("./uploads/" + startdate, { recursive: true });
+        removeOldUploads();
     } catch (e) {
-        console.log('folder not found')
+        console.log(e)
     }
 });
 exports.deleteMedia = async (req, res) => {
     try {
-        var startdate = moment();
-        startdate = startdate.subtract(7, "days");
-        startdate = startdate.format("DDMMYYYY");
-        try {
-            fs.rmdirSync("./uploads/" + startdate, { recursive: true });
-        } catch (e) {
-            console.log('folder not found')
-        }
+        removeOldUploads();
+        res.send({ status: true, message: 'Old media deleted!', data: [] });
     } catch (error) {
         res.status(400).json({ status: 'false', message: 'something is wrong' });
     }

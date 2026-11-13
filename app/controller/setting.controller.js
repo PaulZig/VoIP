@@ -1,12 +1,12 @@
 const Validator = require("validatorjs");
-const telnyx = require("telnyx");
+const Telnyx = require("telnyx");
 const moment = require("moment");
 var mongoose = require("mongoose");
 const twilio = require("twilio");
 const path = require("path");
 const http = require("https");
 const fs = require("fs");
-const request = require("request");
+const axios = require("axios");
 const crypto = require("crypto");
 
 var Setting = require("../model/setting.model");
@@ -23,14 +23,14 @@ const twilioHelper = require("../helper/twilio.helper");
 exports.deleteKey = async (req, res) => {
   try {
     var settingCheck = await Setting.findOne({
-      user: { $eq: req.body.user },
+      user: { $eq: req.user.id },
       _id: { $eq: req.body.profile_id },
     });
     try {
       if (settingCheck.type === "telnyx") {
-        var Telynx = telnyx(settingCheck.api_key);
+        var telnyxClient = new Telnyx({ apiKey: settingCheck.api_key });
         try {
-          await Telynx.phoneNumbers.update(settingCheck.sid, {
+          await telnyxClient.phoneNumbers.update(settingCheck.sid, {
             connection_id: "",
           });
         } catch (error) {}
@@ -140,7 +140,7 @@ exports.create = async (req, res) => {
       };
       let validation = new Validator(req.body, rules);
       if (validation.passes()) {
-        var user = await User.findOne({ _id: { $eq: req.body.user } });
+        var user = await User.findOne({ _id: { $eq: req.user.id } });
         if (user) {
           var firstSettingCheck = await Setting.findOne({
             _id: { $not: { $eq: req.body.setting } },
@@ -156,7 +156,7 @@ exports.create = async (req, res) => {
           } else {
             var settingStore = false;
             var settingCheck = await Setting.findOne({
-              user: { $eq: req.body.user },
+              user: { $eq: req.user.id },
               _id: { $eq: req.body.setting },
             });
             if (settingCheck) {
@@ -219,21 +219,21 @@ exports.create = async (req, res) => {
                 api_key: req.body.api_key,
                 sid: req.body.sid,
                 number: req.body.number,
-                user: req.body.user,
+                user: req.user.id,
                 profile: req.body.profile,
                 type: "telnyx",
               };
               var save = await Setting.create(telynxData);
               settingStore = true;
               var settingCheck = await Setting.findOne({
-                user: { $eq: req.body.user },
+                user: { $eq: req.user.id },
                 _id: { $eq: req.body.setting },
               });
             }
             if (save) {
               if (settingStore) {
-                var saveTelnyxSetting = await telnyx(
-                  req.body.api_key
+                var saveTelnyxSetting = await new Telnyx(
+                  { apiKey: req.body.api_key }
                 ).messagingProfiles.create({
                   name: "VoIP sms Web Application",
                   enabled: true,
@@ -246,7 +246,7 @@ exports.create = async (req, res) => {
                 });
                 var telnyxSetting = saveTelnyxSetting.data.id;
               } else {
-                await telnyx(req.body.api_key).messagingProfiles.update(
+                await new Telnyx({ apiKey: req.body.api_key }).messagingProfiles.update(
                   settingCheck.setting,
                   {
                     webhook_url: combineURLs(
@@ -260,13 +260,13 @@ exports.create = async (req, res) => {
               }
               settingCheck.setting = telnyxSetting;
               settingCheck.save();
-              await telnyx(
-                req.body.api_key
-              ).phoneNumbers.updateMessagingSettings(req.body.sid, {
+              await new Telnyx(
+                { apiKey: req.body.api_key }
+              ).phoneNumbers.messaging.update(req.body.sid, {
                 messaging_profile_id: telnyxSetting,
               });
               if (req.body.override === "true") {
-                await telnyx(req.body.api_key).phoneNumbers.update(
+                await new Telnyx({ apiKey: req.body.api_key }).phoneNumbers.update(
                   req.body.sid,
                   { connection_id: settingCheck.telnyx_twiml }
                 );
@@ -293,9 +293,10 @@ exports.create = async (req, res) => {
         };
         let validation2 = new Validator(req.body, rules2);
         if (validation2.passes()) {
-          var user = await User.findOne({ _id: { $eq: req.body.user } });
+          var user = await User.findOne({ _id: { $eq: req.user.id } });
           if (user) {
             var firstSettingCheck = await Setting.findOne({
+              user: { $eq: req.user.id },
               _id: { $eq: req.body.setting },
             });
             if (firstSettingCheck) {
@@ -334,7 +335,7 @@ exports.create = async (req, res) => {
       };
       let validation = new Validator(req.body, rules);
       if (validation.passes()) {
-        var user = await User.findOne({ _id: { $eq: req.body.user } });
+        var user = await User.findOne({ _id: { $eq: req.user.id } });
         if (user) {
           var firstSettingCheck = await Setting.findOne({
             _id: { $not: { $eq: req.body.setting } },
@@ -350,7 +351,7 @@ exports.create = async (req, res) => {
           } else {
             var settingStore = false;
             var settingCheck = await Setting.findOne({
-              user: { $eq: req.body.user },
+              user: { $eq: req.user.id },
               _id: { $eq: req.body.setting },
             });
             if (settingCheck) {
@@ -392,7 +393,7 @@ exports.create = async (req, res) => {
                 sid: req.body.sid,
                 twilio_sid: req.body.twilio_sid,
                 twilio_token: req.body.twilio_token,
-                user: req.body.user,
+                user: req.user.id,
                 type: "twilio",
                 profile: req.body.profile,
               };
@@ -453,9 +454,10 @@ exports.create = async (req, res) => {
         };
         let validation2 = new Validator(req.body, rules2);
         if (validation2.passes()) {
-          var user = await User.findOne({ _id: { $eq: req.body.user } });
+          var user = await User.findOne({ _id: { $eq: req.user.id } });
           if (user) {
             var firstSettingCheck = await Setting.findOne({
+              user: { $eq: req.user.id },
               _id: { $eq: req.body.setting },
             });
             if (firstSettingCheck) {
@@ -529,7 +531,7 @@ exports.getNumber = async (req, res) => {
       };
       let validation = new Validator(req.body, rules);
       if (validation.passes()) {
-        var phoneNumber = await telnyx(req.body.api_key).phoneNumbers.list();
+        var phoneNumber = await new Telnyx({ apiKey: req.body.api_key }).phoneNumbers.list();
         res.send({
           status: true,
           message: "Phone number list retrieved.",
@@ -559,6 +561,8 @@ exports.getNumber = async (req, res) => {
           .status(419)
           .send({ status: false, errors: validation.errors, data: [] });
       }
+    } else {
+      res.status(400).send({ status: false, message: "Unknown provider type!", data: [] });
     }
   } catch (error) {
     res.status(400).send({ status: false, errors: error.message, data: [] });
@@ -575,7 +579,7 @@ exports.sendSms = async (req, res) => {
     let validation = new Validator(req.body, rules);
     if (validation.passes()) {
       var settingCheck = await Setting.findOne({
-        user: { $eq: req.body.user },
+        user: { $eq: req.user.id },
         _id: { $eq: req.body.profile._id },
       });
       if (settingCheck) {
@@ -613,7 +617,7 @@ exports.sendSms = async (req, res) => {
             if (sendSms.sid !== undefined) {
               var messageData = {
                 sid: sendSms.sid,
-                user: req.body.user,
+                user: req.user.id,
                 number: toNumber,
                 telnyx_number: settingCheck.number,
                 type: "send",
@@ -623,7 +627,7 @@ exports.sendSms = async (req, res) => {
                 setting: settingCheck._id,
               };
               var contact = await Contact.findOne({
-                user: { $eq: req.body.user },
+                user: { $eq: req.user.id },
                 number: { $eq: toNumber },
               });
               if (contact) {
@@ -631,7 +635,7 @@ exports.sendSms = async (req, res) => {
               } else {
                 toNumber = toNumber.slice(-10);
                 var contact2 = await Contact.findOne({
-                  user: { $eq: req.body.user },
+                  user: { $eq: req.user.id },
                   number: { $eq: toNumber },
                 });
                 if (contact2) {
@@ -645,7 +649,7 @@ exports.sendSms = async (req, res) => {
             }
           }
         } else {
-          const Telnyx = telnyx(settingCheck.api_key);
+          const telnyxClient = new Telnyx({ apiKey: settingCheck.api_key });
           var arrMessageData = [];
           for (var i = 0; i < req.body.numbers.length; i++) {
             //var sendNumber = req.body.numbers[i].length
@@ -671,11 +675,11 @@ exports.sendSms = async (req, res) => {
             if (req.body.media.length > 0) {
               telnyxParams.media_urls = req.body.media;
             }
-            var sendSms = await Telnyx.messages.create(telnyxParams);
+            var sendSms = await telnyxClient.messages.create(telnyxParams);
             if (sendSms.data.id !== undefined) {
               var messageData = {
                 sid: sendSms.data.id,
-                user: req.body.user,
+                user: req.user.id,
                 number: toNumber,
                 telnyx_number: settingCheck.number,
                 type: "send",
@@ -685,7 +689,7 @@ exports.sendSms = async (req, res) => {
                 setting: settingCheck._id,
               };
               var contact = await Contact.findOne({
-                user: { $eq: req.body.user },
+                user: { $eq: req.user.id },
                 number: { $eq: toNumber },
               });
               if (contact) {
@@ -693,7 +697,7 @@ exports.sendSms = async (req, res) => {
               } else {
                 toNumber = toNumber.slice(-10);
                 var contact2 = await Contact.findOne({
-                  user: { $eq: req.body.user },
+                  user: { $eq: req.user.id },
                   number: { $eq: toNumber },
                 });
                 if (contact2) {
@@ -750,23 +754,22 @@ exports.receiveSms = async (req, res) => {
           const url = req.body[tMedia]; // link to file you want to download
           //var name = `uploads/${Date.now()}${req.body.SmsSid}.png`;
           // var name = crypto.randomBytes(24).toString('hex');
-          if (tMediaType == "image/gif") {
+          if (req.body[tMediaType] == "image/gif") {
             var name = `${crypto.randomBytes(24).toString("hex")}.gif`;
-          } else if (tMediaType == "image/jpeg") {
+          } else if (req.body[tMediaType] == "image/jpeg") {
             var name = `${crypto.randomBytes(24).toString("hex")}.jpg`;
           } else {
             var name = `${crypto.randomBytes(24).toString("hex")}.png`;
           }
           var date = moment(new Date()).format("MMDDYYYY");
-          try {
-            await fs.promises.access("./uploads/" + date);
-          } catch (e) {
-            await fs.promises.mkdir("./uploads/" + date);
-          }
+          await fs.promises.mkdir("./uploads/" + date, { recursive: true });
 
-          request(url)
-            .pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
-            .on("close", () => console.log("Image downloaded."));
+          const response = await axios({ method: 'get', url, responseType: 'stream' });
+          await new Promise((resolve, reject) => {
+            response.data.pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
+              .on("close", () => { console.log("Image downloaded."); resolve(); })
+              .on("error", reject);
+          });
           savedName = combineURLs(
             process.env.BASE_URL.trim(),
             "uploads",
@@ -774,15 +777,6 @@ exports.receiveSms = async (req, res) => {
             name
           );
           fackMedia.push(savedName);
-          /*request(url).pipe(fs.createWriteStream(name))
-                    .on('close', () => console.log('Image downloaded.'));
-                    savedName = combineURLs(
-                      process.env.BASE_URL.trim(),
-                      "uploads",
-                      date,
-                      name
-                    );
-                    fackMedia.push(savedName)*/
         }
         media = fackMedia;
       }
@@ -806,28 +800,30 @@ exports.receiveSms = async (req, res) => {
           }
 
           var date = moment(new Date()).format("MMDDYYYY");
-          try {
-            await fs.promises.access("./uploads/" + date);
-          } catch (e) {
-            await fs.promises.mkdir("./uploads/" + date);
-          }
+          await fs.promises.mkdir("./uploads/" + date, { recursive: true });
 
-          request(url)
-            .pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
-            .on("close", () => console.log("Image downloaded."));
-            savedName = combineURLs(
-              process.env.BASE_URL.trim(),
-              "uploads",
-              date,
-              name
-            );
+          const response2 = await axios({ method: 'get', url, responseType: 'stream' });
+          await new Promise((resolve, reject) => {
+            response2.data.pipe(fs.createWriteStream(`./uploads/${date}/${name}`))
+              .on("close", () => { console.log("Image downloaded."); resolve(); })
+              .on("error", reject);
+          });
+          savedName = combineURLs(
+            process.env.BASE_URL.trim(),
+            "uploads",
+            date,
+            name
+          );
           fackMedia.push(savedName);
-          // fackMedia.push(messageData.media[i].url)
         }
         media = fackMedia;
       }
     }
-    var settingCheck = await Setting.findOne({ number: { $eq: toNumber } });
+    var settingFilter = { number: { $eq: toNumber } };
+    if (req.params.type === "twilio") {
+      settingFilter.twilio_sid = { $eq: req.body.AccountSid };
+    }
+    var settingCheck = await Setting.findOne(settingFilter);
     if (settingCheck) {
       var messageData2 = {
         sid: sid,
@@ -940,6 +936,7 @@ exports.smsStatus = async (req, res) => {
       ) {
         var settingCheck = await Setting.findOne({
           number: { $eq: req.body.From },
+          twilio_sid: { $eq: req.body.AccountSid },
         });
         if (settingCheck) {
           if (settingCheck.type === "twilio") {
@@ -980,7 +977,7 @@ exports.smsStatus = async (req, res) => {
 
 exports.getNumberList = async (req, res) => {
   try {
-    var user_id = new mongoose.Types.ObjectId(req.body.user);
+    var user_id = new mongoose.Types.ObjectId(req.user.id);
     var setting = new mongoose.Types.ObjectId(req.body.setting);
     var message = await Message.aggregate([
       { $match: { user: user_id, setting: setting } },
@@ -1016,7 +1013,7 @@ exports.getNumberList = async (req, res) => {
 exports.messageDelete = async (req, res) => {
   try {
     var deletecon = {
-      user: { $eq: req.body.user },
+      user: { $eq: req.user.id },
       number: { $eq: req.body.number },
     };
     var messages = await Message.deleteMany(deletecon);
@@ -1035,7 +1032,7 @@ exports.messageDelete = async (req, res) => {
 exports.messageList = async (req, res) => {
   try {
     var filterObject = {
-      user: { $eq: req.body.user },
+      user: { $eq: req.user.id },
       telnyx_number: { $eq: req.body.number.telnyx_number },
       number: { $eq: req.body.number._id },
       setting: { $eq: req.body.profile },

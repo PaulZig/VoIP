@@ -28,6 +28,30 @@ const userDataResponseGen = (userDataObj) => {
   return { _id, name, email, token };
 };
 
+const issueToken = async (user) => {
+    var obj = {id:user.id,email:user.email,name:user.name};
+    var token = jwt.sign(obj, process.env.COOKIE_KEY);
+    user.token = token;
+    await user.save();
+    return token;
+};
+exports.issueToken = issueToken;
+
+const issuePendingToken = (user) => {
+    return jwt.sign({id:user.id, pending:true}, process.env.COOKIE_KEY, {expiresIn:'5m'});
+};
+
+// Returns the decoded payload of a valid pending (pre second factor) token, or false.
+const verifyPendingToken = (token) => {
+    try{
+        var decoded = jwt.verify(token, process.env.COOKIE_KEY);
+        return decoded.pending === true ? decoded : false;
+    }catch(error){
+        return false;
+    }
+};
+exports.verifyPendingToken = verifyPendingToken;
+
 exports.login = async (req, res) => {
     try{
         let rules = {
@@ -43,22 +67,10 @@ exports.login = async (req, res) => {
             if(user){
                 var checkpassword = bcrypt.compareSync(req.body.password, user.password);
                 if(checkpassword){
-                    var obj = {id:user.id,email:user.email,name:user.name};
-                    var token = jwt.sign(obj, process.env.COOKIE_KEY);
-                    user.token = token;
-                    user.save();      
                     var status = 'true';
                     var harwarekey, mfa;
-                    if(user.hardwarekey && user.hardwarekey === 'true'){
-                        var mfa = false
-                        if(user.mfa && user.mfa === 'true') {
-                            mfa = true;
-                        }
-                        status = 'hardwarekey';
-                        // harwarekey = false
-                        harwarekey = await Hardwarekey.find({ user:user._id, registrationComplete: true });
-                        // res.send({status:'hardwarekey', message:'Successfully logged in.', data:user, token:token, harwarekey:harwarekey, mfa:mfa});
-                    } else
+                    // Hardware keys are disabled (see hardwarekey.route.js), so they are
+                    // not offered as a second factor here either.
                     if(user.mfa && user.mfa === 'true'){
                         status = 'mfa';
                         harwarekey = false
@@ -67,7 +79,11 @@ exports.login = async (req, res) => {
                         harwarekey = false;
                         mfa = false;
                     }
+                    // With a second factor enabled, only hand out a pending token that
+                    // the auth middleware rejects until otp-verify / hardware key login.
+                    var token = status === 'true' ? await issueToken(user) : issuePendingToken(user);
                     const userDataResponse = userDataResponseGen(user);
+                    userDataResponse.token = status === 'true' ? token : undefined;
                     res.send({status:status, message:'Successfully logged in.', data:userDataResponse, token:token, harwarekey:harwarekey, mfa:mfa});
                     return;
                 }else{
@@ -86,19 +102,25 @@ exports.login = async (req, res) => {
 //otp-verify
 exports.otpVerify = async (req, res) => {
     try{
-        var userData = {_id:{$eq: req.body.user}};
-        var user = await User.findOne(userData);
-        if(user){
+        var pending = verifyPendingToken(req.body.token);
+        if(!pending){
+            return res.status(401).json({status:'false',message:'Unauthorized Access!'});
+        }
+        var user = await User.findOne({_id:{$eq: pending.id}});
+        if(user && user.mfa === 'true' && user.mfa_token){
             var verifyData = Speakeasy.totp.verify({
                 secret: user.mfa_token,
                 encoding: 'base32',
-                token: req.body.verification_code
+                token: String(req.body.verification_code)
             });
             if(verifyData){
-                res.status(200).json({status:'true',data:[],message:'verified successfully!'});
+                var token = await issueToken(user);
+                res.status(200).json({status:'true',data:userDataResponseGen(user),token:token,message:'verified successfully!'});
             }else{
                 res.status(400).json({status:'false',message:'Please enter valid verification code!'});
             }
+        }else{
+            res.status(401).json({status:'false',message:'Unauthorized Access!'});
         }
     }catch(error){
         res.status(400).json({status:'false',message:'something is wrong'});
@@ -107,6 +129,10 @@ exports.otpVerify = async (req, res) => {
 
 exports.register = async (req, res) => {
     try{
+        // the frontend only offers signup when SIGNUPS is 'on', enforce the same here
+        if((process.env.SIGNUPS || '').trim() !== 'on'){
+            return res.status(403).json({status:'false',message:'Signups are disabled!'});
+        }
         let rules = {
             email: 'required',
             password: 'required|between:6,100'
@@ -202,53 +228,39 @@ exports.checkDirectoryName = (req, res) => {
         res.status(400).json({status:'false',message:'something is wrong'});
     }
 };
-exports.getUpdateVersion = (req, res) => {
+// compares dotted version strings numerically, e.g. 1.9 < 1.10
+const compareVersions = (a, b) => {
+    const pa = String(a).trim().split('.').map(Number);
+    const pb = String(b).trim().split('.').map(Number);
+    for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+        const diff = (pa[i] || 0) - (pb[i] || 0);
+        if (diff !== 0) return diff;
+    }
+    return 0;
+};
+
+exports.getUpdateVersion = async (req, res) => {
     try{
-        var request = require('request');
-        request.get(remoteVersion, async function (error, response, body) {
-            if (!error && response.statusCode == 200) {
-                if(isNaN(body)){
-                    res.send({update: 'false'});
+        const axios = require('axios');
+        const response = await axios.get(remoteVersion);
+        const body = response.data;
+        if(isNaN(body)){
+            res.send({update: 'false'});
+        }else{
+            try {
+                const body2 = fs.readFileSync(currentVersion, 'utf8')
+                if(compareVersions(body2, body) < 0){
+                    res.send({update: 'true'});
                 }else{
-                    // var curruntv = process.env.APP_VERSION
-                    // curruntv = curruntv.replace("v", "").replace("-beta", "");
-                    // console.log(body)
-                    //console.log(currentVersion)
-                    try {
-                        const body2 = fs.readFileSync(currentVersion, 'utf8')
-                        if(body2 < body){
-                            res.send({update: 'true'});
-                        }else{
-                            res.send({update: 'false'});
-                        }
-                    } catch (err) {
-                        console.error(err)
-                        res.send({update: 'false'});
-                    }
-                    // request.get(currentVersion, async function (error, response, body2) {
-                    //     if (!error && response.statusCode == 200) {
-                    //         if(isNaN(body2)){
-                    //             res.send({update: 'false'});
-                    //         }else{
-                    //             if(body2 < body){
-                    //                 res.send({update: 'true'});
-                    //             }else{
-                    //                 res.send({update: 'false'});
-                    //             }
-                    //         }
-                    //     }else{
-                    //         res.send({update: 'false'});
-                    //     }
-                    // });
-                    // console.log(currentVersion)
-                    // var current
+                    res.send({update: 'false'});
                 }
-            }else{
+            } catch (err) {
+                console.error(err)
                 res.send({update: 'false'});
             }
-        });
+        }
     }catch(error){
-        res.status(400).json({status:'false',message:'something is wrong'});
+        res.send({update: 'false'});
     }
 };
 
@@ -259,15 +271,16 @@ exports.updateUserName = async (req, res) => {
         };
         let validation = new Validator(req.body, rules);
         if(validation.passes()){
-            var user = await User.findOne({ email: { $eq: req.body.email } , _id: { $ne: req.user.id } });
+            var email = req.body.email.toLowerCase()
+            var user = await User.findOne({ email: { $eq: email } , _id: { $ne: req.user.id } });
             if(user){
                 res.status(400).json({status:'false',message:'username already exists!'});
             }else{
                 // var checkUser = await User.findById(req.user.id);
                 var checkUser = await User.findOne({_id: { $eq: req.user.id }});
                 if(checkUser){
-                    checkUser.email = req.body.email
-                    checkUser.name = req.body.email
+                    checkUser.email = email
+                    checkUser.name = email
                     var saveEmail = await checkUser.save()
                     const userDataResponse = userDataResponseGen(checkUser);
                     res.send({status:true, message:'username updated successfully!', data:userDataResponse});
@@ -343,18 +356,7 @@ exports.saveMfa = async (req, res) => {
                     res.status(200).json({status:'true',data:userDataResponse,message:'status saved successfully!'});
                 }
             }else{
-                // var checkUser = await User.findById(req.user.id);
-                var checkUser = await User.findOne({_id: { $eq: req.user.id }});
-                if(checkUser){
-                    checkUser.email = req.body.email
-                    checkUser.name = req.body.email
-                    var saveEmail = await checkUser.save()
-
-                    const userDataResponse = userDataResponseGen(checkUser);
-                    res.send({status:true, message:'username updated successfully!', data:userDataResponse});
-                }else{
-                    res.status(400).json({status:'false',message:'User not found!'});
-                }
+                res.status(400).json({status:'false',message:'User not found!'});
             }
         }else{
             res.status(419).send({status: false, errors:validation.errors, data: []});

@@ -56,15 +56,13 @@
       </div>
       <button type="button" @click="verifyStatusCode()" class="btn btn-success m-2 px-4">Verify</button>
     </div>
-    <hardware-key />
   </div>
 </template>
 <script>
 import { post } from '../../../core/module/common.module'
 import CallSetting from '../CallSetting.vue'
-import HardwareKey from './HardwareKey.vue'
 export default {
-components: { CallSetting, HardwareKey },
+components: { CallSetting },
 data () {
   return {
     mfaStatus: false,

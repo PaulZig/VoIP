@@ -4,16 +4,70 @@ services:
     restart: unless-stopped
     volumes:
       - mongo_data:/data/db
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=voipuser
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:?set MONGO_PASSWORD in .env}
 
   app:
     build: .
-    ports:
-      - "8080:8080"
+    restart: unless-stopped
+    # never published on the host: caddy serves the provider webhooks publicly,
+    # ts serves the web UI on the tailnet
+    expose:
+      - "8080"
+    env_file: .env
     environment:
-      - DB=mongodb://mongo:27017/voip
+      - DB=mongodb://voipuser:${MONGO_PASSWORD:?set MONGO_PASSWORD in .env}@mongo:27017/voip?authSource=admin
       - PORT=8080
+      - BASE_URL=https://${DOMAIN:?set DOMAIN in .env}/
+      - HTTPS=true
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       - mongo
 
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      - DOMAIN=${DOMAIN:?set DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
+  # Joins the tailnet as its own machine and serves the web UI at
+  # https://<TS_HOSTNAME>.<tailnet>.ts.net. `tailscale serve` terminates HTTPS
+  # with a certificate Tailscale issues and proxies to the app over the compose
+  # network. Userspace networking (the image default) needs no /dev/net/tun.
+  ts:
+    image: tailscale/tailscale:v1.104.4
+    hostname: ${TS_HOSTNAME:-voip}
+    restart: unless-stopped
+    environment:
+      - TS_HOSTNAME=${TS_HOSTNAME:-voip}
+      # Only used to join the first time; afterwards the node identity in the
+      # tailscale_state volume is enough. Without a key the container logs a
+      # login URL instead.
+      - TS_AUTHKEY=${TS_AUTHKEY:-}
+      - TS_AUTH_ONCE=true
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/serve.json
+    volumes:
+      - tailscale_state:/var/lib/tailscale
+      - ./tailscale-serve.json:/config/serve.json:ro
+    depends_on:
+      - app
+
 volumes:
+  tailscale_state:
   mongo_data:
+  uploads:
+  caddy_data:
+  caddy_config:
