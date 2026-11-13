@@ -147,6 +147,8 @@ app.use(bodyParser.json({limit: '10mb', verify: keepRawBody}));
 // parse requests of content-type - application/x-www-form-urlencoded
 app.use(bodyParser.urlencoded({ extended: true, limit: '1mb', verify: keepRawBody }));
 app.use('/uploads', express.static('uploads'));
+// a missing upload is a 404, not the frontend page served by the routes below
+app.use('/uploads', (req, res) => res.status(404).end());
 app.use('/src', express.static('src'));
 app.use('/frontend', express.static('frontend'));
 // app.use('/frontend', express.static('frontend'));
